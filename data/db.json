@@ -1,0 +1,62 @@
+{
+  "adminPassword": "thorin2026",
+  "studio": {
+    "name": "Thórin Tattoo Studio",
+    "artist": "Daniel Bourscheid",
+    "instagramStudio": "thorintattoo",
+    "instagramArtist": "danielbourscheid",
+    "whatsapp": "5551998761246",
+    "since": "2017",
+    "postsCount": "+5.400",
+    "followersCount": "+7.900",
+    "statusAgenda": "Agenda Aberta • Orçamentos via WhatsApp",
+    "address": "Rua Leonardo Celso Mombach 156, Sala 303, Centro — Barão, RS (CEP 95730-000)",
+    "bio": "Comandado pelo tatuador Daniel Bourscheid desde 2017. Do traço fino e delicado ao peso do Blackwork e Sombreado, transformando ideias em arte autoral na pele no centro de Barão/RS.",
+    "avatarUrl": "/assets/avatar-daniel.webp",
+    "logoUrl": "/assets/logo-thorin.webp"
+  },
+  "categories": [
+    {
+      "id": "fineline",
+      "label": "Fine Line & Delicadas"
+    },
+    {
+      "id": "blackwork",
+      "label": "Blackwork & Sombreado"
+    },
+    {
+      "id": "escrita",
+      "label": "Escritas & Caligrafia"
+    },
+    {
+      "id": "fechamento",
+      "label": "Fechamentos & Grandes"
+    }
+  ],
+  "portfolio": [
+    {
+      "id": "1",
+      "title": "Caligrafia 'Fé' & Terço em Pontilhismo",
+      "category": "fineline",
+      "featured": true,
+      "imageUrl": "/assets/tattoo-fe.webp",
+      "createdAt": "2026-10-14"
+    },
+    {
+      "id": "2",
+      "title": "Fechamento de Braço Sombreado",
+      "category": "blackwork",
+      "featured": true,
+      "imageUrl": "https://images.unsplash.com/photo-1590246814883-57c511e76917?auto=format&fit=crop&w=800&q=80",
+      "createdAt": "2026-10-14"
+    },
+    {
+      "id": "3",
+      "title": "Projeto Autoral Blackwork",
+      "category": "blackwork",
+      "featured": false,
+      "imageUrl": "https://images.unsplash.com/photo-1562962230-16e4623d36e6?auto=format&fit=crop&w=800&q=80",
+      "createdAt": "2026-10-14"
+    }
+  ]
+}
