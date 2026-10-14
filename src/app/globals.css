@@ -29,15 +29,30 @@ body {
   border-radius: 9999px;
 }
 
+/* Oculta scrollbar mantendo toque fluido em carrosséis mobile */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Parede de Tijolos Bicolor do Estúdio Thórin — Camada Fixa GPU (Zero Repaint no Scroll) */
 .brick-wall-fixed {
   background-color: #160506;
   background-image: url("/assets/brick-texture.webp");
-  background-size: 420px 210px;
+  background-size: 300px 150px;
   background-repeat: repeat;
   background-position: center top;
   transform: translate3d(0, 0, 0);
   backface-visibility: hidden;
+}
+
+@media (min-width: 640px) {
+  .brick-wall-fixed {
+    background-size: 420px 210px;
+  }
 }
 
 /* Vinheta Arquitetônica Calibrada — Preserva o destaque dos tijolos e do rejunte claro */
@@ -78,14 +93,20 @@ body {
   pointer-events: none;
 }
 
-/* Textura de Tijolos Destacada para Cards e Painéis da Forja */
+/* Textura de Tijolos Destacada para Cards e Painéis */
 .brick-surface-card {
   background-color: #140506;
   background-image:
     linear-gradient(145deg, rgba(18, 5, 7, 0.64) 0%, rgba(8, 4, 5, 0.84) 100%),
     url("/assets/brick-texture.webp");
-  background-size: auto, 340px 170px;
+  background-size: auto, 260px 130px;
   background-repeat: no-repeat, repeat;
+}
+
+@media (min-width: 640px) {
+  .brick-surface-card {
+    background-size: auto, 340px 170px;
+  }
 }
 
 .text-forge-gradient {
@@ -105,16 +126,28 @@ body {
   color: transparent;
 }
 
-/* Recorte Chanfrado Editorial */
+/* Recorte Chanfrado Editorial (Mais suave no mobile p/ não cortar conteúdo) */
 .clip-forge-card {
-  clip-path: polygon(0 0, calc(100% - 28px) 0, 100% 28px, 100% 100%, 28px 100%, 0 calc(100% - 28px));
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+}
+
+@media (min-width: 640px) {
+  .clip-forge-card {
+    clip-path: polygon(0 0, calc(100% - 28px) 0, 100% 28px, 100% 100%, 28px 100%, 0 calc(100% - 28px));
+  }
 }
 
 .clip-forge-btn {
-  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
 }
 
-/* Rotação Contínua Suave do Astrolábio / Runa da Forja */
+@media (min-width: 640px) {
+  .clip-forge-btn {
+    clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  }
+}
+
+/* Rotação Contínua Suave */
 @keyframes spinSlow {
   from {
     transform: rotate(0deg);
