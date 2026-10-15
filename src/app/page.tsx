@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
+import TattooAssistantWidget from "@/components/TattooAssistantWidget";
 
 const MANIFESTO_WORDS = [
   "MAIS",
@@ -1401,6 +1402,8 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      <TattooAssistantWidget />
     </main>
   );
 }

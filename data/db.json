@@ -58,5 +58,72 @@
       "imageUrl": "https://images.unsplash.com/photo-1562962230-16e4623d36e6?auto=format&fit=crop&w=800&q=80",
       "createdAt": "2026-10-14"
     }
+  ],
+  "pricingRules": {
+    "valorMinimo": 180,
+    "valorHoraBase": 220,
+    "multiplicadorComplexidade": {
+      "baixa": 1,
+      "media": 1.25,
+      "alta": 1.55
+    },
+    "adicionalCoberturaPct": 25
+  },
+  "availabilitySlots": [
+    {
+      "id": "slot-1",
+      "label": "Terça-feira • 14:00 às 18:00",
+      "maxHours": 4,
+      "available": true
+    },
+    {
+      "id": "slot-2",
+      "label": "Quinta-feira • 09:00 às 12:00",
+      "maxHours": 3,
+      "available": true
+    },
+    {
+      "id": "slot-3",
+      "label": "Quinta-feira • 14:00 às 19:00",
+      "maxHours": 5,
+      "available": true
+    },
+    {
+      "id": "slot-4",
+      "label": "Sexta-feira • 14:00 às 18:30",
+      "maxHours": 4.5,
+      "available": true
+    },
+    {
+      "id": "slot-5",
+      "label": "Sábado • 09:00 às 13:00",
+      "maxHours": 4,
+      "available": true
+    },
+    {
+      "id": "slot-6",
+      "label": "Sábado • 14:00 às 19:30",
+      "maxHours": 5.5,
+      "available": true
+    }
+  ],
+  "bookings": [
+    {
+      "id": "TH-7271",
+      "createdAt": "2026-10-15T16:43:47.271Z",
+      "status": "pendente",
+      "clientName": "Alisson Rodrigo dos Santos",
+      "clientWhatsapp": "54 999512776",
+      "style": "Fine Line / Delicada",
+      "sizeCm": 7,
+      "bodyPart": "pulso",
+      "complexity": "baixa",
+      "cobertura": false,
+      "estimatedHours": 1,
+      "priceRange": "R$ 200 a R$ 260",
+      "selectedSlotId": "slot-2",
+      "selectedSlotLabel": "Quinta-feira • 09:00 às 12:00",
+      "referenceImage": null
+    }
   ]
 }
