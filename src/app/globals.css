@@ -115,15 +115,17 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
-/* Tipografia Vazada Monumental */
+/* Tipografia Vazada Monumental (Estêncil Arquitetônico Legível sobre os Tijolos) */
 .text-stroke-monument {
-  -webkit-text-stroke: 1.5px rgba(234, 88, 12, 0.25);
-  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(245, 158, 11, 0.42);
+  color: rgba(234, 88, 12, 0.1);
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.85);
 }
 
 .text-stroke-gold {
-  -webkit-text-stroke: 1px rgba(251, 191, 36, 0.45);
-  color: transparent;
+  -webkit-text-stroke: 1.2px rgba(251, 191, 36, 0.36);
+  color: rgba(251, 191, 36, 0.07);
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.85);
 }
 
 /* Recorte Chanfrado Editorial (Mais suave no mobile p/ não cortar conteúdo) */

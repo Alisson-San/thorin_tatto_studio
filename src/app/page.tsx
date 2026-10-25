@@ -5,33 +5,31 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
 import TattooAssistantWidget from "@/components/TattooAssistantWidget";
+import VisualEditorInspector, { EditableBlockId } from "@/components/VisualEditorInspector";
 
-const MANIFESTO_WORDS = [
-  "MAIS",
-  "DO",
-  "QUE",
-  "TINTA",
-  "SOBRE",
-  "A",
-  "PELE.",
-  "CRIAMOS",
-  "IDENTIDADE,",
-  "MEMÓRIA",
-  "E",
-  "ARTE",
-  "AUTORAL",
-  "COM",
-  "PRECISÃO",
-  "EM",
-  "CADA",
-  "TRAÇO.",
-];
+const DEFAULT_MANIFESTO_TEXT =
+  "MAIS DO QUE TINTA SOBRE A PELE. CRIAMOS IDENTIDADE, MEMÓRIA E ARTE AUTORAL COM PRECISÃO EM CADA TRAÇO.";
 
 export default function HomePage() {
   const [data, setData] = useState<any>(null);
   const [booted, setBooted] = useState(false);
   const [filter, setFilter] = useState("all");
   const [selectedTattoo, setSelectedTattoo] = useState<any>(null);
+
+  // Estados do Modo de Edição Visual ao Vivo (Admin Builder)
+  const [adminPassword, setAdminPassword] = useState("");
+  const [isAdminLogged, setIsAdminLogged] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [previewClean, setPreviewClean] = useState(false);
+  const [activeBlock, setActiveBlock] = useState<EditableBlockId>(null);
+  const [activePortfolioId, setActivePortfolioId] = useState<string | null>(null);
+  const [isNewPortfolioDraft, setIsNewPortfolioDraft] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+
+  const savedSnapshotRef = useRef<any>(null);
+  const blockSnapshotRef = useRef<any>(null);
 
   // Refs p/ animações 60fps sem re-render do React
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -51,8 +49,6 @@ export default function HomePage() {
   const runeRingRef = useRef<HTMLDivElement | null>(null);
   const dragonLayerRef = useRef<HTMLDivElement | null>(null);
   const portraitLayerRef = useRef<HTMLDivElement | null>(null);
-  const monumentTextLeftRef = useRef<HTMLDivElement | null>(null);
-  const monumentTextRightRef = useRef<HTMLDivElement | null>(null);
 
   const marqueeLeftRef = useRef<HTMLDivElement | null>(null);
   const marqueeRightRef = useRef<HTMLDivElement | null>(null);
@@ -79,14 +75,33 @@ export default function HomePage() {
     }
   }, []);
 
-  // 1. Carrega dados do estúdio
+  // 1. Carrega dados do estúdio e restaura sessão de administrador (se ativa)
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedPwd = sessionStorage.getItem("thorin_admin_pwd");
+      const savedMode = sessionStorage.getItem("thorin_admin_mode");
+      const urlParams = new URLSearchParams(window.location.search);
+      const wantsEdit = urlParams.get("edit") === "1";
+
+      if (savedPwd) {
+        setAdminPassword(savedPwd);
+        setIsAdminLogged(true);
+        if (savedMode === "true" || wantsEdit) {
+          setIsEditMode(true);
+        }
+      }
+    }
+
     fetch("/api/studio")
       .then((r) => r.json())
       .then((res) => {
         setData(res);
+        savedSnapshotRef.current = JSON.parse(JSON.stringify(res));
+        blockSnapshotRef.current = JSON.parse(JSON.stringify(res));
       });
   }, []);
+
+  const hasDataLoaded = Boolean(data);
 
   // 2. Contador do Preloader Cinematográfico (DOM direto sem re-render a cada frame)
   useEffect(() => {
@@ -228,32 +243,6 @@ export default function HomePage() {
               },
             });
           }
-        }
-
-        if (monumentTextLeftRef.current) {
-          gsap.to(monumentTextLeftRef.current, {
-            xPercent: -18,
-            ease: "none",
-            scrollTrigger: {
-              trigger: heroSectionRef.current,
-              start: "top top",
-              end: "bottom top",
-              scrub: true,
-            },
-          });
-        }
-
-        if (monumentTextRightRef.current) {
-          gsap.to(monumentTextRightRef.current, {
-            xPercent: 18,
-            ease: "none",
-            scrollTrigger: {
-              trigger: heroSectionRef.current,
-              start: "top top",
-              end: "bottom top",
-              scrub: true,
-            },
-          });
         }
       }
 
@@ -471,7 +460,209 @@ export default function HomePage() {
       ctxGsap.revert();
       lenis?.destroy();
     };
-  }, [data, booted]);
+  }, [hasDataLoaded, booted]);
+
+  // Funções do Editor Visual em Tempo Real
+  const handleAdminLogin = async (pwd: string): Promise<boolean> => {
+    const res = await fetch("/api/studio", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pwd }),
+    });
+    if (res.ok) {
+      setAdminPassword(pwd);
+      setIsAdminLogged(true);
+      setIsEditMode(true);
+      setPreviewClean(false);
+      setStatusMessage("Modo de edição visual ativado!");
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("thorin_admin_pwd", pwd);
+        sessionStorage.setItem("thorin_admin_mode", "true");
+      }
+      return true;
+    }
+    return false;
+  };
+
+  const handleToggleEditMode = (enabled: boolean) => {
+    setIsEditMode(enabled);
+    if (!enabled) {
+      setActiveBlock(null);
+      setPreviewClean(false);
+    }
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("thorin_admin_mode", enabled ? "true" : "false");
+    }
+  };
+
+  const handleSelectBlock = (block: EditableBlockId, portfolioId: string | null = null) => {
+    if (!block) {
+      setActiveBlock(null);
+      setActivePortfolioId(null);
+      setIsNewPortfolioDraft(false);
+      return;
+    }
+    if (block !== activeBlock || portfolioId !== activePortfolioId) {
+      blockSnapshotRef.current = JSON.parse(JSON.stringify(data));
+    }
+    setActiveBlock(block);
+    setActivePortfolioId(portfolioId);
+    setIsNewPortfolioDraft(false);
+    setPreviewClean(false);
+  };
+
+  const handleUpdateStudio = (partial: Record<string, any>) => {
+    setData((prev: any) => ({
+      ...prev,
+      studio: {
+        ...prev.studio,
+        ...partial,
+      },
+    }));
+    setHasUnsavedChanges(true);
+    setStatusMessage("Pré-visualizando alterações no bloco...");
+  };
+
+  const handleUpdateCategories = (nextCategories: any[]) => {
+    setData((prev: any) => ({
+      ...prev,
+      categories: nextCategories,
+    }));
+    setHasUnsavedChanges(true);
+    setStatusMessage("Pré-visualizando categorias...");
+  };
+
+  const handleUpdatePortfolioItem = (id: string, partial: Record<string, any>) => {
+    setData((prev: any) => ({
+      ...prev,
+      portfolio: (prev.portfolio || []).map((item: any) =>
+        item.id === id ? { ...item, ...partial } : item
+      ),
+    }));
+    setHasUnsavedChanges(true);
+    setStatusMessage("Pré-visualizando obra no card...");
+  };
+
+  const handleDeletePortfolioItem = (id: string) => {
+    setData((prev: any) => ({
+      ...prev,
+      portfolio: (prev.portfolio || []).filter((item: any) => item.id !== id),
+    }));
+    setActiveBlock(null);
+    setActivePortfolioId(null);
+    setIsNewPortfolioDraft(false);
+    setHasUnsavedChanges(true);
+    setStatusMessage("Obra removida em pré-visualização. Clique em Confirmar para salvar.");
+  };
+
+  const handleMovePortfolioItem = (id: string, direction: "up" | "down") => {
+    setData((prev: any) => {
+      const list = [...(prev.portfolio || [])];
+      const idx = list.findIndex((i: any) => i.id === id);
+      if (idx === -1) return prev;
+      const [item] = list.splice(idx, 1);
+      if (direction === "up") {
+        list.unshift(item);
+      } else {
+        list.push(item);
+      }
+      return { ...prev, portfolio: list };
+    });
+    setHasUnsavedChanges(true);
+  };
+
+  const handleStartNewPortfolioItem = (featuredDefault = false) => {
+    blockSnapshotRef.current = JSON.parse(JSON.stringify(data));
+    const newId = String(Date.now());
+    const newItem = {
+      id: newId,
+      title: "Nova Arte Autoral (Edite ao lado)",
+      category: data?.categories?.[0]?.id || "fineline",
+      featured: featuredDefault,
+      imageUrl: "/assets/tattoo-fe.webp",
+      createdAt: new Date().toISOString().slice(0, 10),
+    };
+    setFilter("all");
+    setData((prev: any) => ({
+      ...prev,
+      portfolio: [newItem, ...(prev.portfolio || [])],
+    }));
+    setActiveBlock("portfolio-item");
+    setActivePortfolioId(newId);
+    setIsNewPortfolioDraft(true);
+    setPreviewClean(false);
+    setHasUnsavedChanges(true);
+    setStatusMessage("Nova obra inserida como pré-visualização! Envie a foto e confirme.");
+
+    setTimeout(() => {
+      const targetId = featuredDefault ? "destaques" : "galeria";
+      document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+  };
+
+  const handleRevertBlock = () => {
+    if (blockSnapshotRef.current) {
+      setData(JSON.parse(JSON.stringify(blockSnapshotRef.current)));
+    }
+    setActiveBlock(null);
+    setActivePortfolioId(null);
+    setIsNewPortfolioDraft(false);
+    const matchesSaved =
+      JSON.stringify(blockSnapshotRef.current) === JSON.stringify(savedSnapshotRef.current);
+    setHasUnsavedChanges(!matchesSaved);
+    setStatusMessage("Bloco revertido para o estado anterior.");
+  };
+
+  const handleRevertAll = () => {
+    if (savedSnapshotRef.current) {
+      const restored = JSON.parse(JSON.stringify(savedSnapshotRef.current));
+      setData(restored);
+      blockSnapshotRef.current = JSON.parse(JSON.stringify(restored));
+    }
+    setActiveBlock(null);
+    setActivePortfolioId(null);
+    setIsNewPortfolioDraft(false);
+    setHasUnsavedChanges(false);
+    setStatusMessage("Todas as alterações foram descartadas.");
+  };
+
+  const handleConfirmChanges = async () => {
+    if (!data) return;
+    setSaving(true);
+    setStatusMessage("Salvando alterações no site...");
+    const res = await fetch("/api/studio", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        password: adminPassword,
+        studio: data.studio,
+        portfolio: data.portfolio,
+        categories: data.categories,
+      }),
+    });
+    setSaving(false);
+    if (res.ok) {
+      savedSnapshotRef.current = JSON.parse(JSON.stringify(data));
+      blockSnapshotRef.current = JSON.parse(JSON.stringify(data));
+      setHasUnsavedChanges(false);
+      setIsNewPortfolioDraft(false);
+      setActiveBlock(null);
+      setActivePortfolioId(null);
+      setStatusMessage("✅ Alterações confirmadas e publicadas ao vivo!");
+    } else {
+      setStatusMessage("❌ Erro ao salvar: verifique sua senha de administrador.");
+    }
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdminLogged(false);
+    setIsEditMode(false);
+    setActiveBlock(null);
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("thorin_admin_pwd");
+      sessionStorage.removeItem("thorin_admin_mode");
+    }
+  };
 
   // Efeito Tilt 3D Interativo Leve para os Monólitos e Cards
   const handleCardTilt = (e: React.MouseEvent<HTMLElement>) => {
@@ -524,6 +715,43 @@ export default function HomePage() {
     if (filter === "all") return true;
     return item.category === filter;
   });
+
+  const showEditControls = isAdminLogged && isEditMode && !previewClean;
+
+  const manifestoWords = String(studio.manifestoText ?? DEFAULT_MANIFESTO_TEXT)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const pillarsList = studio.pillars || [
+    {
+      roman: "I",
+      tag: "VERSATILIDADE TÉCNICA",
+      title: "Domínio do Fine Line ao Blackwork Sólido",
+      desc: "Caligrafias delicadas como o 'Fé' com cruz em traço fino ou fechamentos sombreados de alto impacto: cada agulha e composição são pensadas para a anatomia do seu corpo.",
+    },
+    {
+      roman: "II",
+      tag: "RIGOR & SEGURANÇA",
+      title: "Biossegurança & Pigmentos de Alta Performance",
+      desc: "Materiais 100% descartáveis, bancada esterilizada a cada sessão e tintas de altíssima estabilidade para garantir cicatrização limpa e contraste duradouro ao longo dos anos.",
+    },
+    {
+      roman: "III",
+      tag: "ATENDIMENTO EXCLUSIVO • SALA 303",
+      title: "Sessões Individuais no Centro de Barão",
+      desc: `Localizado em ${studio.address}. Um estúdio reservado, climatizado e preparado para desenvolver sua ideia com tranquilidade.`,
+    },
+  ];
+
+  const editFrameClass = (blockId: EditableBlockId, idMatch?: string) => {
+    if (!showEditControls) return "";
+    const isSelected =
+      activeBlock === blockId && (!idMatch || activePortfolioId === idMatch);
+    return isSelected
+      ? "ring-2 ring-ember-gold shadow-[0_0_35px_rgba(251,191,36,0.45)] cursor-pointer transition-all"
+      : "ring-1 ring-dashed ring-ember-gold/55 hover:ring-2 hover:ring-ember-gold cursor-pointer transition-all";
+  };
 
   const waLink = (msg: string) =>
     `https://wa.me/${studio.whatsapp}?text=${encodeURIComponent(msg)}`;
@@ -607,7 +835,24 @@ export default function HomePage() {
 
       {/* DOCK FLUTUANTE CENTRALIZADO (COM NAVEGAÇÃO RÁPIDA MOBILE) */}
       <header className="fixed top-2.5 sm:top-5 inset-x-0 z-40 px-3 sm:px-4 pointer-events-none flex flex-col items-center gap-1.5">
-        <div className="pointer-events-auto w-full max-w-6xl rounded-full bg-obsidian/85 backdrop-blur-md border border-ember/35 shadow-[0_12px_40px_rgba(0,0,0,0.85)] px-3.5 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
+        <div
+          onClick={() => {
+            if (showEditControls) handleSelectBlock("header");
+          }}
+          className={`pointer-events-auto relative w-full max-w-6xl rounded-full bg-obsidian/85 backdrop-blur-md border border-ember/35 shadow-[0_12px_40px_rgba(0,0,0,0.85)] px-3.5 sm:px-6 h-14 sm:h-16 flex items-center justify-between ${editFrameClass("header")}`}
+        >
+          {showEditControls && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSelectBlock("header");
+              }}
+              className="absolute -bottom-3 left-6 z-50 px-2.5 py-0.5 rounded-full bg-ember-gold text-obsidian font-display font-black text-[9px] uppercase tracking-wider shadow-lg"
+            >
+              ✏️ Editar Logo & Topo
+            </button>
+          )}
           <a href="#" className="flex items-center gap-2.5 sm:gap-3 group shrink-0">
             <div className="relative w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center">
               <div className="absolute inset-0 rounded-full bg-ember/20 blur-md group-hover:bg-ember/40 transition-colors" />
@@ -640,8 +885,15 @@ export default function HomePage() {
             <a href="#contato" className="px-3.5 py-1.5 rounded-full hover:bg-wine/50 hover:text-ember-gold transition-all">
               Contato
             </a>
-            <a href="/admin" className="px-3 py-1.5 rounded-full text-zinc-400 hover:text-ember-gold transition-colors">
-              Admin
+            <a
+              href="/admin"
+              className={`px-3 py-1.5 rounded-full transition-colors ${
+                isAdminLogged
+                  ? "bg-ember/25 text-ember-gold font-bold"
+                  : "text-zinc-400 hover:text-ember-gold"
+              }`}
+            >
+              {isAdminLogged ? "⚙️ Painel Admin" : "Admin"}
             </a>
           </nav>
 
@@ -698,28 +950,30 @@ export default function HomePage() {
         ref={heroSectionRef}
         className="relative min-h-[100svh] pt-28 sm:pt-32 pb-12 sm:pb-16 flex items-center overflow-hidden perspective-stage z-20"
       >
-        {/* PLANO 0: Tipografia Monumental Dupla em Contra-Movimento no Fundo */}
-        <div className="pointer-events-none select-none absolute inset-x-0 top-1/2 -translate-y-1/2 flex flex-col gap-6 sm:gap-8 z-0 opacity-20 sm:opacity-30">
-          <div
-            ref={monumentTextLeftRef}
-            className="whitespace-nowrap font-display font-black text-[18vw] sm:text-[14vw] leading-none text-stroke-monument gpu-layer"
-          >
-            THÓRIN TATTOO STUDIO • DANIEL BOURSCHEID • DESDE 2017 •
-          </div>
-          <div
-            ref={monumentTextRightRef}
-            className="whitespace-nowrap font-display font-black text-[18vw] sm:text-[14vw] leading-none text-stroke-gold opacity-45 gpu-layer"
-          >
-            • BLACKWORK • REALISMO • FINE LINE • BARÃO RS • SALA 303 •
-          </div>
-        </div>
-
         {/* CONTAINER PRINCIPAL EM 12 COLUNAS */}
         <div className="relative z-10 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-10 grid lg:grid-cols-12 gap-8 lg:gap-8 items-center">
           {/* =================================================================
               ALA ESQUERDA (COL 1-7): IDENTIDADE MONUMENTAL, PROPOSTA & CTAs
           ================================================================== */}
-          <div className="lg:col-span-7 flex flex-col items-center text-center lg:items-start lg:text-left space-y-5 sm:space-y-6 order-2 lg:order-1">
+          <div
+            onClick={() => {
+              if (showEditControls) handleSelectBlock("hero-content");
+            }}
+            className={`lg:col-span-7 relative flex flex-col items-center text-center lg:items-start lg:text-left space-y-5 sm:space-y-6 order-2 lg:order-1 rounded-2xl p-2 sm:p-3 ${editFrameClass("hero-content")}`}
+          >
+            {showEditControls && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelectBlock("hero-content");
+                }}
+                className="self-center lg:self-start px-3 py-1 rounded-full bg-ember-gold text-obsidian font-display font-black text-[10px] uppercase tracking-wider shadow-lg"
+              >
+                ✏️ Editar Textos & Indicadores da Hero
+              </button>
+            )}
+
             {/* Selo de Status & Localização */}
             <div className="hero-editorial-item flex flex-wrap items-center justify-center lg:justify-start gap-2 sm:gap-3">
               <div className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-1.5 rounded-full bg-obsidian/85 border border-ember/50 text-ember-gold text-[10px] sm:text-[11px] font-display font-bold uppercase tracking-[0.18em] sm:tracking-[0.22em] shadow-lg">
@@ -727,20 +981,23 @@ export default function HomePage() {
                 <span>{studio.statusAgenda}</span>
               </div>
               <span className="px-3 sm:px-3.5 py-1.5 rounded-full bg-wine-dark/75 border border-wine-light/40 text-[9px] sm:text-[10px] font-display uppercase tracking-[0.22em] sm:tracking-[0.28em] text-zinc-200">
-                Barão / RS • Sala 303
+                {studio.locationBadge ?? "Barão / RS • Sala 303"}
               </span>
             </div>
 
             {/* Nome Monumental do Estúdio */}
             <div className="hero-editorial-item space-y-2">
               <p className="font-display text-[10px] sm:text-sm font-bold uppercase tracking-[0.28em] sm:tracking-[0.42em] text-ember-gold">
-                Estúdio de Tatuagem Autoral • Desde {studio.since}
+                {studio.heroKicker ?? `Estúdio de Tatuagem Autoral • Desde ${studio.since}`}
               </p>
               <h1 className="font-gothic text-[2.85rem] sm:text-7xl xl:text-[5.5rem] text-forge-gradient leading-[0.96] sm:leading-[0.94] tracking-wide drop-shadow-[0_12px_30px_rgba(0,0,0,0.95)]">
                 {studio.name}
               </h1>
               <p className="font-display font-black text-lg sm:text-2xl xl:text-3xl tracking-tight text-white/95 pt-1">
-                TRAÇO PRECISO, PERSONALIDADE E <span className="text-ember-gold">ARTE NA PELE.</span>
+                {studio.heroTagline ?? "TRAÇO PRECISO, PERSONALIDADE E"}{" "}
+                <span className="text-ember-gold">
+                  {studio.heroTaglineAccent ?? "ARTE NA PELE."}
+                </span>
               </p>
             </div>
 
@@ -802,7 +1059,25 @@ export default function HomePage() {
               ALA DIREITA (COL 8-12): PALCO 3D CONCÊNTRICO DO TATUADOR + BRASÃO
               (Palco isolado do plinto inferior p/ manter Anel, Dragão e Avatar 100% centralizados)
           ================================================================== */}
-          <div className="lg:col-span-5 relative flex flex-col items-center justify-center order-1 lg:order-2">
+          <div
+            onClick={() => {
+              if (showEditControls) handleSelectBlock("hero-stage");
+            }}
+            className={`lg:col-span-5 relative flex flex-col items-center justify-center order-1 lg:order-2 rounded-2xl p-2 ${editFrameClass("hero-stage")}`}
+          >
+            {showEditControls && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelectBlock("hero-stage");
+                }}
+                className="mb-2 z-30 px-3 py-1 rounded-full bg-ember-gold text-obsidian font-display font-black text-[10px] uppercase tracking-wider shadow-lg"
+              >
+                📷 Trocar Foto do Tatuador / Brasão
+              </button>
+            )}
+
             {/* PALCO CONCÊNTRICO: Anel + Dragão + Retrato */}
             <div className="relative w-[270px] h-[300px] sm:w-[420px] sm:h-[460px] xl:w-[460px] xl:h-[500px] flex items-end justify-center">
               {/* PLANO 1 (Fundo): Geometria Sutil Girando */}
@@ -894,7 +1169,7 @@ export default function HomePage() {
             <div className="relative z-[6] -mt-1 w-full max-w-[310px] sm:max-w-sm clip-forge-btn brick-surface-card border border-ember/55 px-4 sm:px-5 py-2.5 sm:py-3.5 shadow-[0_20px_50px_rgba(0,0,0,0.95)] flex items-center justify-between gap-2 sm:gap-3">
               <div className="min-w-0">
                 <p className="text-[8px] sm:text-[9px] font-display font-bold uppercase tracking-[0.22em] sm:tracking-[0.28em] text-ember-gold">
-                  Tatuador & Fundador
+                  {studio.artistRole ?? "Tatuador & Fundador"}
                 </p>
                 <p className="font-display text-sm sm:text-lg font-black text-white leading-tight truncate">
                   {studio.artist}
@@ -918,18 +1193,35 @@ export default function HomePage() {
       {/* =====================================================================
           FAIXAS CINÉTICAS CRUZADAS (ESPAÇAMENTO CORRIGIDO NO MOBILE)
       ====================================================================== */}
-      <div className="relative py-6 sm:py-10 overflow-hidden z-20 select-none">
+      <div
+        onClick={() => {
+          if (showEditControls) handleSelectBlock("marquees");
+        }}
+        className={`relative py-6 sm:py-10 overflow-hidden z-20 select-none ${editFrameClass("marquees")}`}
+      >
+        {showEditControls && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSelectBlock("marquees");
+            }}
+            className="absolute top-2 left-1/2 -translate-x-1/2 z-30 px-3 py-1 rounded-full bg-ember-gold text-obsidian font-display font-black text-[10px] uppercase tracking-wider shadow-lg"
+          >
+            ✏️ Editar Faixas Cruzadas
+          </button>
+        )}
         {/* Faixa 1 */}
         <div className="-rotate-1 sm:-rotate-2 scale-105 py-3 sm:py-4 brick-surface-card border-y border-ember/45 shadow-[0_10px_40px_rgba(0,0,0,0.9)]">
           <div ref={marqueeLeftRef} className="flex whitespace-nowrap gap-8 sm:gap-12 items-center gpu-layer">
             {Array.from({ length: 6 }).map((_, idx) => (
               <div key={idx} className="flex items-center gap-8 sm:gap-12">
-                <span className="font-gothic text-2xl sm:text-4xl text-forge-gradient">Thórin Tattoo Studio</span>
+                <span className="font-gothic text-2xl sm:text-4xl text-forge-gradient">{studio.name}</span>
                 <span className="text-[10px] sm:text-xs uppercase tracking-[0.3em] sm:tracking-[0.4em] text-zinc-100">
                   • ARTE AUTORAL DESDE {studio.since}
                 </span>
                 <span className="font-display text-sm sm:text-lg font-black text-ember-gold">
-                  BLACKWORK • FINE LINE • SOMBREADO
+                  {studio.marqueeSpecialties ?? "BLACKWORK • FINE LINE • SOMBREADO"}
                 </span>
               </div>
             ))}
@@ -942,11 +1234,11 @@ export default function HomePage() {
             {Array.from({ length: 6 }).map((_, idx) => (
               <div key={idx} className="flex items-center gap-8 sm:gap-12">
                 <span className="font-display text-xs sm:text-base font-black uppercase tracking-[0.22em] sm:tracking-[0.3em]">
-                  DANIEL BOURSCHEID • TRAÇO EXCLUSIVO
+                  {studio.marqueeHighlight ?? "DANIEL BOURSCHEID • TRAÇO EXCLUSIVO"}
                 </span>
                 <span className="font-gothic text-xl sm:text-3xl">Barão • Rio Grande do Sul</span>
                 <span className="font-display text-[10px] sm:text-xs font-extrabold uppercase tracking-[0.25em] sm:tracking-[0.35em]">
-                  • SESSÕES EXCLUSIVAS COM HORA MARCADA
+                  {studio.marqueeSub ?? "• SESSÕES EXCLUSIVAS COM HORA MARCADA"}
                 </span>
               </div>
             ))}
@@ -960,13 +1252,40 @@ export default function HomePage() {
       <section id="identidade" ref={manifestoSectionRef} className="py-16 sm:py-32 relative z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           {/* Manifesto Iluminado por Scroll */}
-          <div className="max-w-5xl mx-auto text-center mb-12 sm:mb-20">
+          <div
+            onClick={() => {
+              if (showEditControls) handleSelectBlock("manifesto");
+            }}
+            className={`max-w-5xl mx-auto text-center mb-12 sm:mb-20 rounded-2xl p-3 ${editFrameClass("manifesto")}`}
+          >
+            {showEditControls && (
+              <div className="mb-3">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSelectBlock("manifesto");
+                  }}
+                  className="px-3 py-1 rounded-full bg-ember-gold text-obsidian font-display font-black text-[10px] uppercase tracking-wider shadow-lg"
+                >
+                  ✏️ Editar Frase do Manifesto
+                </button>
+              </div>
+            )}
             <span className="inline-block px-3.5 sm:px-4 py-1.5 rounded-full bg-obsidian/75 border border-ember/40 text-ember-gold text-[10px] sm:text-xs font-bold uppercase tracking-[0.25em] sm:tracking-[0.35em] mb-4 sm:mb-6">
-              Assinatura & Identidade • Desde {studio.since}
+              {studio.manifestoBadge ?? `Assinatura & Identidade • Desde ${studio.since}`}
             </span>
             <h2 className="font-display text-2xl sm:text-5xl lg:text-6xl font-black leading-[1.2] sm:leading-[1.14] tracking-tight flex flex-wrap justify-center gap-x-2 sm:gap-x-4 gap-y-1.5 sm:gap-y-2 drop-shadow-[0_6px_24px_rgba(0,0,0,0.95)]">
-              {MANIFESTO_WORDS.map((word, idx) => {
-                const isHighlight = ["CRIAMOS", "IDENTIDADE,", "ARTE", "AUTORAL", "PRECISÃO", "TRAÇO."].includes(word);
+              {manifestoWords.map((word, idx) => {
+                const cleanWord = word.replace(/[.,!?;:]/g, "").toUpperCase();
+                const isHighlight = [
+                  "CRIAMOS",
+                  "IDENTIDADE",
+                  "ARTE",
+                  "AUTORAL",
+                  "PRECISÃO",
+                  "TRAÇO",
+                ].includes(cleanWord);
                 return (
                   <span
                     key={idx}
@@ -985,10 +1304,25 @@ export default function HomePage() {
           <div className="grid lg:grid-cols-12 gap-6 sm:gap-8 items-stretch">
             {/* Coluna Esquerda: Brasão Oficial & Essência Thórin */}
             <div
+              onClick={() => {
+                if (showEditControls) handleSelectBlock("essence");
+              }}
               onMouseMove={handleCardTilt}
               onMouseLeave={resetCardTilt}
-              className="lg:col-span-5 section-reveal clip-forge-card brick-surface-card relative p-6 sm:p-10 border border-ember/50 shadow-[0_25px_60px_rgba(0,0,0,0.9)] flex flex-col justify-between overflow-hidden group gpu-layer"
+              className={`lg:col-span-5 section-reveal clip-forge-card brick-surface-card relative p-6 sm:p-10 border border-ember/50 shadow-[0_25px_60px_rgba(0,0,0,0.9)] flex flex-col justify-between overflow-hidden group gpu-layer ${editFrameClass("essence")}`}
             >
+              {showEditControls && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSelectBlock("essence");
+                  }}
+                  className="self-start mb-3 z-30 px-3 py-1 rounded-full bg-ember-gold text-obsidian font-display font-black text-[10px] uppercase tracking-wider shadow-lg"
+                >
+                  ✏️ Editar Card & Imagem
+                </button>
+              )}
               <div className="absolute -right-8 -top-8 sm:-right-12 sm:-top-12 font-gothic text-[120px] sm:text-[180px] leading-none text-ember/15 select-none pointer-events-none">
                 Th
               </div>
@@ -1009,45 +1343,49 @@ export default function HomePage() {
                   }}
                 />
                 <img
-                  src={studio.logoUrl}
+                  src={studio.essenceImageUrl || studio.logoUrl}
                   alt="Brasão Oficial Thórin Tattoo Studio"
                   className="relative w-44 sm:w-64 mx-auto object-contain group-hover:scale-105 transition-transform duration-500"
                 />
               </div>
 
               <div className="relative z-10 border-t border-ember/30 pt-4 sm:pt-5 bg-obsidian/55 -mx-6 -mb-6 sm:-mx-10 sm:-mb-10 p-5 sm:p-8">
-                <p className="font-gothic text-2xl sm:text-3xl text-forge-gradient">A Essência Thórin</p>
+                <p className="font-gothic text-2xl sm:text-3xl text-forge-gradient">
+                  {studio.essenceTitle ?? "A Essência Thórin"}
+                </p>
                 <p className="text-xs sm:text-sm text-zinc-200 mt-1.5 leading-relaxed">
-                  Assim como o lendário mestre artesão que inspira nosso nome, tratamos cada tatuagem como uma obra única — unindo dedicação ao detalhe, traço firme e mais de{" "}
-                  <strong className="text-ember-gold">{studio.postsCount}</strong> trabalhos compartilhados.
+                  {studio.essenceText ?? (
+                    <>
+                      Assim como o lendário mestre artesão que inspira nosso nome, tratamos cada tatuagem como uma obra única — unindo dedicação ao detalhe, traço firme e mais de{" "}
+                      <strong className="text-ember-gold">{studio.postsCount}</strong> trabalhos compartilhados.
+                    </>
+                  )}
                 </p>
               </div>
             </div>
 
             {/* Coluna Direita: 3 Pilares Escalonados */}
-            <div className="lg:col-span-7 flex flex-col justify-between gap-4 sm:gap-6">
-              {[
-                {
-                  roman: "I",
-                  tag: "VERSATILIDADE TÉCNICA",
-                  title: "Domínio do Fine Line ao Blackwork Sólido",
-                  desc: "Caligrafias delicadas como o 'Fé' com cruz em traço fino ou fechamentos sombreados de alto impacto: cada agulha e composição são pensadas para a anatomia do seu corpo.",
-                },
-                {
-                  roman: "II",
-                  tag: "RIGOR & SEGURANÇA",
-                  title: "Biossegurança & Pigmentos de Alta Performance",
-                  desc: "Materiais 100% descartáveis, bancada esterilizada a cada sessão e tintas de altíssima estabilidade para garantir cicatrização limpa e contraste duradouro ao longo dos anos.",
-                },
-                {
-                  roman: "III",
-                  tag: "ATENDIMENTO EXCLUSIVO • SALA 303",
-                  title: "Sessões Individuais no Centro de Barão",
-                  desc: `Localizado em ${studio.address}. Um estúdio reservado, climatizado e preparado para desenvolver sua ideia com tranquilidade.`,
-                },
-              ].map((pillar, i) => (
+            <div
+              onClick={() => {
+                if (showEditControls) handleSelectBlock("pillars");
+              }}
+              className={`lg:col-span-7 flex flex-col justify-between gap-4 sm:gap-6 rounded-2xl p-1 ${editFrameClass("pillars")}`}
+            >
+              {showEditControls && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSelectBlock("pillars");
+                  }}
+                  className="self-start px-3 py-1 rounded-full bg-ember-gold text-obsidian font-display font-black text-[10px] uppercase tracking-wider shadow-lg"
+                >
+                  ✏️ Editar Pilares (I, II, III)
+                </button>
+              )}
+              {pillarsList.map((pillar: any, i: number) => (
                 <div
-                  key={pillar.roman}
+                  key={`${pillar.roman}-${i}`}
                   onMouseMove={handleCardTilt}
                   onMouseLeave={resetCardTilt}
                   className={`section-reveal clip-forge-card brick-surface-card relative p-5 sm:p-8 border border-ember/35 hover:border-ember transition-colors shadow-[0_20px_50px_rgba(0,0,0,0.85)] overflow-hidden group gpu-layer ${
@@ -1076,7 +1414,7 @@ export default function HomePage() {
       {/* =====================================================================
           ATO III: VITRINE DE DESTAQUES (RESPONSIVA NO MOBILE / PINNED NO DESKTOP)
       ====================================================================== */}
-      {featuredItems.length > 0 && (
+      {(featuredItems.length > 0 || showEditControls) && (
         <section
           id="destaques"
           ref={horizontalSectionRef}
@@ -1091,12 +1429,47 @@ export default function HomePage() {
           </div>
 
           <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 mb-8 sm:mb-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4 sm:gap-6 relative z-10 text-center sm:text-left">
-            <div>
+            <div
+              onClick={() => {
+                if (showEditControls) handleSelectBlock("featured-header");
+              }}
+              className={`rounded-xl p-2 ${editFrameClass("featured-header")}`}
+            >
+              {showEditControls && (
+                <div className="mb-2 flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelectBlock("featured-header");
+                    }}
+                    className="px-3 py-1 rounded-full bg-ember-gold text-obsidian font-display font-black text-[10px] uppercase tracking-wider shadow-lg"
+                  >
+                    ✏️ Editar Título
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStartNewPortfolioItem(true);
+                    }}
+                    className="px-3 py-1 rounded-full bg-ember text-white font-display font-black text-[10px] uppercase tracking-wider shadow-lg hover:brightness-110"
+                  >
+                    + Adicionar Foto em Destaque
+                  </button>
+                </div>
+              )}
               <span className="text-ember-gold text-[10px] sm:text-xs font-bold uppercase tracking-[0.28em] sm:tracking-[0.35em]">
-                Seleção de Trabalhos • Vitrine Interativa
+                {studio.featuredSubtitle ?? "Seleção de Trabalhos • Vitrine Interativa"}
               </span>
               <h2 className="font-display text-2xl sm:text-5xl font-black mt-1">
-                OBRAS EM <span className="text-forge-gradient">DESTAQUE</span>
+                {studio.featuredTitle ? (
+                  <span className="text-forge-gradient">{studio.featuredTitle}</span>
+                ) : (
+                  <>
+                    OBRAS EM <span className="text-forge-gradient">DESTAQUE</span>
+                  </>
+                )}
               </h2>
             </div>
 
@@ -1126,11 +1499,29 @@ export default function HomePage() {
             {featuredItems.map((item: any, index: number) => (
               <div
                 key={item.id}
-                onClick={() => setSelectedTattoo(item)}
-                onMouseEnter={() => setCursorMode("VER OBRA")}
+                onClick={() => {
+                  if (showEditControls) {
+                    handleSelectBlock("portfolio-item", item.id);
+                  } else {
+                    setSelectedTattoo(item);
+                  }
+                }}
+                onMouseEnter={() => setCursorMode(showEditControls ? "EDITAR" : "VER OBRA")}
                 onMouseLeave={() => setCursorMode("")}
-                className="featured-vault-card clip-forge-card snap-center shrink-0 w-full max-w-[350px] sm:max-w-none sm:w-[420px] lg:w-[470px] cursor-pointer group relative overflow-hidden brick-surface-card border border-ember/45 shadow-[0_25px_65px_rgba(0,0,0,0.92)] gpu-layer"
+                className={`featured-vault-card clip-forge-card snap-center shrink-0 w-full max-w-[350px] sm:max-w-none sm:w-[420px] lg:w-[470px] cursor-pointer group relative overflow-hidden brick-surface-card border border-ember/45 shadow-[0_25px_65px_rgba(0,0,0,0.92)] gpu-layer ${editFrameClass("portfolio-item", item.id)}`}
               >
+                {showEditControls && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelectBlock("portfolio-item", item.id);
+                    }}
+                    className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 px-4 py-1.5 rounded-full bg-ember-gold text-obsidian font-display font-black text-[11px] uppercase tracking-wider shadow-2xl whitespace-nowrap"
+                  >
+                    ✏️ Editar Obra / Trocar Foto
+                  </button>
+                )}
                 <div className="aspect-[4/5] overflow-hidden relative bg-obsidian">
                   <img
                     src={item.imageUrl}
@@ -1159,7 +1550,7 @@ export default function HomePage() {
                     </h3>
                   </div>
                   <span className="clip-forge-btn shrink-0 px-3.5 sm:px-4 py-2 sm:py-2.5 bg-wine group-hover:bg-ember text-white text-[10px] sm:text-xs font-display font-bold uppercase tracking-wider transition-colors">
-                    Detalhes ↗
+                    {showEditControls ? "Editar ✎" : "Detalhes ↗"}
                   </span>
                 </div>
               </div>
@@ -1174,12 +1565,47 @@ export default function HomePage() {
       <section id="galeria" className="py-16 sm:py-32 relative z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-10 sm:mb-16 gap-5 sm:gap-8 section-reveal text-center sm:text-left">
-            <div>
+            <div
+              onClick={() => {
+                if (showEditControls) handleSelectBlock("gallery-header");
+              }}
+              className={`rounded-xl p-2 ${editFrameClass("gallery-header")}`}
+            >
+              {showEditControls && (
+                <div className="mb-2 flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelectBlock("gallery-header");
+                    }}
+                    className="px-3 py-1 rounded-full bg-ember-gold text-obsidian font-display font-black text-[10px] uppercase tracking-wider shadow-lg"
+                  >
+                    ✏️ Editar Título & Categorias
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStartNewPortfolioItem(false);
+                    }}
+                    className="px-3.5 py-1 rounded-full bg-gradient-to-r from-ember to-ember-gold text-obsidian font-display font-black text-[10px] uppercase tracking-wider shadow-lg"
+                  >
+                    + Adicionar Nova Foto ao Portfólio
+                  </button>
+                </div>
+              )}
               <span className="text-ember-gold text-[10px] sm:text-xs font-bold uppercase tracking-[0.28em] sm:tracking-[0.35em]">
-                Galeria de Trabalhos
+                {studio.gallerySubtitle ?? "Galeria de Trabalhos"}
               </span>
               <h2 className="font-display text-2xl sm:text-5xl lg:text-6xl font-black mt-1">
-                PORTFÓLIO DO <span className="text-forge-gradient">ESTÚDIO</span>
+                {studio.galleryTitle ? (
+                  <span className="text-forge-gradient">{studio.galleryTitle}</span>
+                ) : (
+                  <>
+                    PORTFÓLIO DO <span className="text-forge-gradient">ESTÚDIO</span>
+                  </>
+                )}
               </h2>
             </div>
 
@@ -1213,22 +1639,57 @@ export default function HomePage() {
 
           {/* Grid Editorial Desalinhado (Coluna Central Deslocada no Desktop) */}
           <div ref={galleryGridRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 lg:gap-10 pb-6 sm:pb-12">
+            {showEditControls && (
+              <div
+                onClick={() => handleStartNewPortfolioItem(false)}
+                className="clip-forge-card brick-surface-card cursor-pointer border-2 border-dashed border-ember-gold/70 hover:border-ember-gold p-8 flex flex-col items-center justify-center text-center min-h-[380px] group transition-all hover:bg-ember/10"
+              >
+                <div className="w-16 h-16 rounded-full bg-ember/20 border border-ember-gold flex items-center justify-center text-3xl text-ember-gold group-hover:scale-110 transition-transform mb-4">
+                  +
+                </div>
+                <p className="font-display text-lg font-black text-white uppercase tracking-wider">
+                  Adicionar Nova Foto / Obra
+                </p>
+                <p className="text-xs text-zinc-300 mt-2 max-w-xs leading-relaxed">
+                  Clique para inserir um novo card nesta grade, enviar a foto e visualizar exatamente como ficará preenchido antes de confirmar.
+                </p>
+              </div>
+            )}
+
             {filteredPortfolio.map((item: any, idx: number) => {
               const isMiddleColumn = idx % 3 === 1;
               return (
                 <article
                   key={item.id}
-                  onClick={() => setSelectedTattoo(item)}
+                  onClick={() => {
+                    if (showEditControls) {
+                      handleSelectBlock("portfolio-item", item.id);
+                    } else {
+                      setSelectedTattoo(item);
+                    }
+                  }}
                   onMouseMove={handleCardTilt}
                   onMouseLeave={(e) => {
                     resetCardTilt(e);
                     setCursorMode("");
                   }}
-                  onMouseEnter={() => setCursorMode("AMPLIAR")}
-                  className={`vault-card clip-forge-card brick-surface-card cursor-pointer group overflow-hidden border border-ember/35 hover:border-ember transition-colors duration-300 shadow-[0_20px_50px_rgba(0,0,0,0.85)] gpu-layer ${
-                    isMiddleColumn ? "lg:translate-y-12" : ""
-                  }`}
+                  onMouseEnter={() => setCursorMode(showEditControls ? "EDITAR" : "AMPLIAR")}
+                  className={`vault-card clip-forge-card brick-surface-card cursor-pointer group overflow-hidden border border-ember/35 hover:border-ember transition-colors duration-300 shadow-[0_20px_50px_rgba(0,0,0,0.85)] gpu-layer relative ${
+                    isMiddleColumn && !showEditControls ? "lg:translate-y-12" : ""
+                  } ${editFrameClass("portfolio-item", item.id)}`}
                 >
+                  {showEditControls && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectBlock("portfolio-item", item.id);
+                      }}
+                      className="absolute top-3.5 right-3.5 z-30 px-3 py-1 rounded-full bg-ember-gold text-obsidian font-display font-black text-[10px] uppercase tracking-wider shadow-lg"
+                    >
+                      ✏️ Editar / Foto
+                    </button>
+                  )}
                   <div className="aspect-[4/5] overflow-hidden bg-obsidian relative">
                     <img
                       src={item.imageUrl}
@@ -1252,7 +1713,7 @@ export default function HomePage() {
                       </h3>
                     </div>
                     <span className="clip-forge-btn shrink-0 text-[11px] sm:text-xs px-3.5 sm:px-4 py-2 bg-wine/80 group-hover:bg-ember text-white font-display font-bold uppercase tracking-wider transition-colors">
-                      Ver +
+                      {showEditControls ? "Editar ✎" : "Ver +"}
                     </span>
                   </div>
                 </article>
@@ -1270,18 +1731,42 @@ export default function HomePage() {
         className="relative py-16 sm:py-32 border-t border-ember/35 overflow-hidden z-20 bg-gradient-to-b from-transparent via-obsidian/50 to-obsidian/90"
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 relative z-10 section-reveal">
-          <div className="clip-forge-card brick-surface-card border border-ember/55 p-6 sm:p-14 lg:p-16 shadow-[0_30px_90px_rgba(0,0,0,0.95)]">
+          <div
+            onClick={() => {
+              if (showEditControls) handleSelectBlock("contact");
+            }}
+            className={`clip-forge-card brick-surface-card border border-ember/55 p-6 sm:p-14 lg:p-16 shadow-[0_30px_90px_rgba(0,0,0,0.95)] relative ${editFrameClass("contact")}`}
+          >
+            {showEditControls && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelectBlock("contact");
+                }}
+                className="mb-4 px-3.5 py-1 rounded-full bg-ember-gold text-obsidian font-display font-black text-[10px] uppercase tracking-wider shadow-lg"
+              >
+                ✏️ Editar Bloco de Contato, Endereço & Redes
+              </button>
+            )}
             <div className="grid lg:grid-cols-12 gap-8 sm:gap-10 items-center">
               <div className="lg:col-span-7 space-y-4 sm:space-y-5 text-center sm:text-left">
                 <span className="inline-flex items-center gap-2 text-[10px] sm:text-xs uppercase tracking-[0.28em] sm:tracking-[0.35em] text-ember-gold font-bold">
                   <span className="w-2 h-2 rounded-full bg-ember animate-ping shrink-0" />
-                  Thórin Tattoo Studio • Barão / RS
+                  {studio.name} • Barão / RS
                 </span>
                 <h2 className="font-display text-2xl sm:text-5xl lg:text-6xl font-black leading-[1.1] sm:leading-[1.05]">
-                  PRONTO PARA <span className="text-forge-gradient">ETERNIZAR</span> SUA PRÓXIMA TATTOO?
+                  {studio.contactTitle ? (
+                    <span className="text-forge-gradient">{studio.contactTitle}</span>
+                  ) : (
+                    <>
+                      PRONTO PARA <span className="text-forge-gradient">ETERNIZAR</span> SUA PRÓXIMA TATTOO?
+                    </>
+                  )}
                 </h2>
                 <p className="text-zinc-200 text-sm sm:text-lg max-w-xl mx-auto sm:mx-0 leading-relaxed">
-                  Traga sua referência ou ideia para desenvolvermos um projeto exclusivo. Atendimento com hora marcada no Centro de Barão.
+                  {studio.contactText ??
+                    "Traga sua referência ou ideia para desenvolvermos um projeto exclusivo. Atendimento com hora marcada no Centro de Barão."}
                 </p>
 
                 <div className="pt-4 grid sm:grid-cols-2 gap-4 text-xs sm:text-sm text-zinc-200 border-t border-ember/30">
@@ -1326,7 +1811,7 @@ export default function HomePage() {
                   onMouseEnter={() => setCursorMode("WHATSAPP")}
                   className="clip-forge-btn w-full py-4 sm:py-5 px-4 sm:px-7 bg-gradient-to-r from-ember via-ember-bright to-ember-gold text-obsidian font-display font-black text-xs sm:text-sm uppercase tracking-wider sm:tracking-[0.15em] text-center shadow-2xl shadow-ember/40 hover:brightness-110 transition-all"
                 >
-                  WhatsApp (51) 99876-1246 ↗
+                  WhatsApp ({studio.whatsapp}) ↗
                 </a>
                 <a
                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(studio.address)}`}
@@ -1344,7 +1829,7 @@ export default function HomePage() {
 
           <footer className="mt-10 sm:mt-12 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 text-[10px] sm:text-xs text-zinc-400 uppercase tracking-[0.2em] sm:tracking-[0.25em] text-center">
             <span>© {new Date().getFullYear()} {studio.name} • Todos os direitos reservados</span>
-            <span>Daniel Bourscheid • Barão/RS</span>
+            <span>{studio.artist} • Barão/RS</span>
           </footer>
         </div>
       </section>
@@ -1402,6 +1887,33 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      <VisualEditorInspector
+        isAdminLogged={isAdminLogged}
+        isEditMode={isEditMode}
+        previewClean={previewClean}
+        activeBlock={activeBlock}
+        activePortfolioId={activePortfolioId}
+        isNewPortfolioDraft={isNewPortfolioDraft}
+        data={data}
+        hasUnsavedChanges={hasUnsavedChanges}
+        saving={saving}
+        statusMessage={statusMessage}
+        onLogin={handleAdminLogin}
+        onToggleEditMode={handleToggleEditMode}
+        onTogglePreviewClean={setPreviewClean}
+        onSelectBlock={handleSelectBlock}
+        onUpdateStudio={handleUpdateStudio}
+        onUpdateCategories={handleUpdateCategories}
+        onUpdatePortfolioItem={handleUpdatePortfolioItem}
+        onDeletePortfolioItem={handleDeletePortfolioItem}
+        onMovePortfolioItem={handleMovePortfolioItem}
+        onStartNewPortfolioItem={handleStartNewPortfolioItem}
+        onConfirmChanges={handleConfirmChanges}
+        onRevertBlock={handleRevertBlock}
+        onRevertAll={handleRevertAll}
+        onLogout={handleAdminLogout}
+      />
 
       <TattooAssistantWidget />
     </main>

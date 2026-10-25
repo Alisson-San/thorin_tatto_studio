@@ -61,6 +61,61 @@ function calculateTattooEstimate(
   };
 }
 
+function resolveSlotDateAndTime(slotLabel: string, estimatedHours: number) {
+  const label = String(slotLabel || "").toLowerCase();
+  const weekdayMap: { key: string; day: number }[] = [
+    { key: "domingo", day: 0 },
+    { key: "segunda", day: 1 },
+    { key: "terça", day: 2 },
+    { key: "terca", day: 2 },
+    { key: "quarta", day: 3 },
+    { key: "quinta", day: 4 },
+    { key: "sexta", day: 5 },
+    { key: "sábado", day: 6 },
+    { key: "sabado", day: 6 },
+  ];
+
+  // Verifica se já contém data DD/MM ou YYYY-MM-DD no label
+  const isoMatch = label.match(/(\d{4}-\d{2}-\d{2})/);
+  const brMatch = label.match(/(\d{2})\/(\d{2})(?:\/(\d{4}))?/);
+
+  const now = new Date();
+  let targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  if (isoMatch) {
+    targetDate = new Date(`${isoMatch[1]}T12:00:00`);
+  } else if (brMatch) {
+    const d = Number(brMatch[1]);
+    const m = Number(brMatch[2]) - 1;
+    const y = brMatch[3] ? Number(brMatch[3]) : now.getFullYear();
+    targetDate = new Date(y, m, d);
+  } else {
+    const matchedDay = weekdayMap.find((w) => label.includes(w.key));
+    if (matchedDay) {
+      const currentDay = targetDate.getDay();
+      let diff = (matchedDay.day - currentDay + 7) % 7;
+      if (diff === 0) diff = 7;
+      targetDate.setDate(targetDate.getDate() + diff);
+    } else {
+      targetDate.setDate(targetDate.getDate() + 1);
+    }
+  }
+
+  const yyyy = targetDate.getFullYear();
+  const mm = String(targetDate.getMonth() + 1).padStart(2, "0");
+  const dd = String(targetDate.getDate()).padStart(2, "0");
+  const dateStr = `${yyyy}-${mm}-${dd}`;
+
+  const timeMatches = String(slotLabel || "").match(/(\d{1,2}:\d{2})/g);
+  const startTime = timeMatches?.[0] ? timeMatches[0].padStart(5, "0") : "14:00";
+  const startHourNum = Number(startTime.split(":")[0]) || 14;
+  const hrs = Math.max(1, Math.ceil(Number(estimatedHours) || 2));
+  const computedEnd = `${String(Math.min(22, startHourNum + hrs)).padStart(2, "0")}:00`;
+  const endTime = timeMatches?.[1] ? timeMatches[1].padStart(5, "0") : computedEnd;
+
+  return { date: dateStr, startTime, endTime };
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -71,10 +126,15 @@ export async function POST(req: Request) {
     // 1. AÇÃO DIRETA: CRIAR PRÉ-AGENDAMENTO PELO CLIENTE
     if (action === "create_booking" && clientLead) {
       const bookingId = `TH-${Date.now().toString().slice(-4)}`;
+      const resolvedSchedule = resolveSlotDateAndTime(
+        clientLead.slotLabel,
+        clientLead.estimatedHours
+      );
       const newBooking = {
         id: bookingId,
         createdAt: new Date().toISOString(),
         status: "pendente",
+        eventType: "sessao",
         clientName: clientLead.name,
         clientWhatsapp: clientLead.whatsapp,
         style: clientLead.style,
@@ -86,6 +146,9 @@ export async function POST(req: Request) {
         priceRange: clientLead.priceRange,
         selectedSlotId: clientLead.slotId,
         selectedSlotLabel: clientLead.slotLabel,
+        date: clientLead.date || resolvedSchedule.date,
+        startTime: clientLead.startTime || resolvedSchedule.startTime,
+        endTime: clientLead.endTime || resolvedSchedule.endTime,
         referenceImage: imageBase64 || null,
       };
 

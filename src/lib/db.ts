@@ -12,23 +12,28 @@ declare global {
 
 export async function readDb(): Promise<any> {
   // 1. Em ambiente serverless (Vercel), tenta ler do /tmp se já houver atualização em runtime
+  if (process.env.VERCEL) {
+    try {
+      const tmpRaw = await fs.readFile(TMP_DB_PATH, "utf-8");
+      const parsed = JSON.parse(tmpRaw);
+      globalThis.__thorinDbCache = parsed;
+      return parsed;
+    } catch {
+      // Segue para memória ou arquivo original do repositório
+    }
+  }
+
   try {
-    const tmpRaw = await fs.readFile(TMP_DB_PATH, "utf-8");
-    const parsed = JSON.parse(tmpRaw);
+    const raw = await fs.readFile(LOCAL_DB_PATH, "utf-8");
+    const parsed = JSON.parse(raw);
     globalThis.__thorinDbCache = parsed;
     return parsed;
   } catch {
-    // Segue para memória ou arquivo original do repositório
+    if (globalThis.__thorinDbCache) {
+      return globalThis.__thorinDbCache;
+    }
+    throw new Error("Banco de dados local não encontrado");
   }
-
-  if (globalThis.__thorinDbCache) {
-    return globalThis.__thorinDbCache;
-  }
-
-  const raw = await fs.readFile(LOCAL_DB_PATH, "utf-8");
-  const parsed = JSON.parse(raw);
-  globalThis.__thorinDbCache = parsed;
-  return parsed;
 }
 
 export async function writeDb(db: any): Promise<void> {

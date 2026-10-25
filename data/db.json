@@ -80,7 +80,7 @@
       "id": "slot-2",
       "label": "Quinta-feira • 09:00 às 12:00",
       "maxHours": 3,
-      "available": true
+      "available": false
     },
     {
       "id": "slot-3",
@@ -110,8 +110,9 @@
   "bookings": [
     {
       "id": "TH-7271",
-      "createdAt": "2026-10-15T16:43:47.271Z",
-      "status": "pendente",
+      "createdAt": "2026-10-25T12:00:00.000Z",
+      "status": "aprovado",
+      "eventType": "sessao",
       "clientName": "Alisson Rodrigo dos Santos",
       "clientWhatsapp": "54 999512776",
       "style": "Fine Line / Delicada",
@@ -119,11 +120,43 @@
       "bodyPart": "pulso",
       "complexity": "baixa",
       "cobertura": false,
-      "estimatedHours": 1,
+      "estimatedHours": 1.5,
       "priceRange": "R$ 200 a R$ 260",
+      "depositPaid": "Pendente",
       "selectedSlotId": "slot-2",
       "selectedSlotLabel": "Quinta-feira • 09:00 às 12:00",
+      "date": "2026-10-29",
+      "startTime": "09:00",
+      "endTime": "10:30",
+      "notes": "Traço fino caligráfico no pulso.",
       "referenceImage": null
+    }
+  ],
+  "whatsappConfig": {
+    "provider": "direct",
+    "apiUrl": "",
+    "apiKey": "",
+    "instanceName": "",
+    "autoSendOnApprove": true,
+    "templates": {
+      "confirmacao": "Fala *{nome}*! Tudo certo? 🐉\nAqui é o Daniel do *Thórin Tattoo Studio*.\n\nSua sessão foi *CONFIRMADA* na nossa agenda:\n📌 *Protocolo:* #{protocolo}\n📅 *Data:* {data}\n⏰ *Horário:* {horario}\n🎨 *Projeto:* {arte} ({tamanho}cm • {local})\n💰 *Valor Estimado:* {valor}\n📍 *Local:* {endereco}\n\nQualquer dúvida antes da sessão é só chamar por aqui!",
+      "lembrete": "Olá *{nome}*! Passando para lembrar da nossa sessão de tatuagem amanhã no *Thórin Tattoo Studio* 🐉\n\n📅 *Data:* {data} às *{horario}*\n🎨 *Projeto:* {arte}\n📍 *Endereço:* {endereco}\n\n💡 *Dicas pré-sessão:*\n• Hidrate bem a pele e beba bastante água\n• Alimente-se bem antes de vir\n• Evite bebidas alcoólicas nas 24h anteriores\n\nNos vemos no estúdio!",
+      "reagendamento": "Olá *{nome}*, aqui é o Daniel do *Thórin Tattoo Studio*.\n\nAtualizamos o horário da sua sessão (#{protocolo}):\n📅 *Nova Data:* {data}\n⏰ *Novo Horário:* {horario}\n🎨 *Projeto:* {arte}\n\nMe confirma por aqui se ficou tudo certo para você!",
+      "posTattoo": "Fala *{nome}*! Muito obrigado pela confiança no *Thórin Tattoo Studio* hoje 🐉🔥\n\n🧴 *Cuidados Essenciais de Cicatrização:*\n1. Lave suavemente com sabonete neutro 2 a 3x ao dia.\n2. Seque sem esfregar (use papel toalha dando leves toques).\n3. Aplique uma camada fina da pomada cicatrizante recomendada.\n4. Evite sol direto, piscina, mar e alimentos muito gordurosos nos primeiros 15 dias.\n5. Não arranque as casquinhas!\n\nQualquer dúvida na cicatrização estou à disposição!",
+      "comunicado": "Fala *{nome}*! Aqui é o Daniel do *Thórin Tattoo Studio* 🐉\n\nEstou passando para avisar que abrimos novos horários especiais na agenda desta quinzena em Barão/RS!\n\nSe quiser tirar sua próxima ideia do papel ou agendar uma sessão, me responde aqui para garantirmos seu horário com prioridade!"
+    }
+  },
+  "whatsappLogs": [
+    {
+      "id": "WA-1792945576713",
+      "sentAt": "2026-10-25T16:26:16.713Z",
+      "recipientName": "Alisson Rodrigo dos Santos",
+      "recipientPhone": "5554999512776",
+      "type": "confirmacao",
+      "bookingId": "TH-7271",
+      "message": "Fala *Alisson Rodrigo dos Santos*! Tudo certo? 🐉\nAqui é o Daniel do *Thórin Tattoo Studio*.\n\nSua sessão foi *CONFIRMADA* na nossa agenda:\n📌 *Protocolo:* #TH-7271\n📅 *Data:* 29/10/2026\n⏰ *Horário:* 09:00 às 10:30\n🎨 *Projeto:* Fine Line / Delicada (7cm • pulso)\n💰 *Valor Estimado:* R$ 200 a R$ 260\n📍 *Local:* Rua Leonardo Celso Mombach 156, Sala 303, Centro — Barão, RS (CEP 95730-000)\n\nQualquer dúvida antes da sessão é só chamar por aqui!",
+      "deliveryMethod": "wa.me",
+      "statusInfo": "Modo Direto (WhatsApp Web / App)"
     }
   ]
 }

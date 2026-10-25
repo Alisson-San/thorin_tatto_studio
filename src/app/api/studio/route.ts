@@ -23,6 +23,8 @@ export async function POST(req: Request) {
   if (body.pricingRules) db.pricingRules = body.pricingRules;
   if (body.availabilitySlots) db.availabilitySlots = body.availabilitySlots;
   if (body.bookings) db.bookings = body.bookings;
+  if (body.whatsappConfig) db.whatsappConfig = body.whatsappConfig;
+  if (body.whatsappLogs) db.whatsappLogs = body.whatsappLogs;
 
   await writeDb(db);
   return NextResponse.json({ ok: true, db });
